@@ -163,7 +163,7 @@ pub fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>), anyhow::
                     },
                     TuiRequest::PrintError(data, _) => {
                         for line in data.split('\n') {
-                            buffer.push(line.to_string().light_red().into());
+                            buffer.push(format!("[ERR] {line}").light_red().into());
                         }
                     },
                 }

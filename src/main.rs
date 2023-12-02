@@ -1,17 +1,35 @@
 use anyhow::Context;
+use clap::{Parser, arg};
+
 use crate::telnet::*;
 use crate::tui::*;
 
 mod telnet;
 mod tui;
 
+#[derive(Parser, Debug)]
+struct Args {
+    #[arg(short, long)]
+    address: Option<String>,
+
+    #[arg(short, long, default_value_t = 4000)]
+    port: u16,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    let args = Args::parse();
+
     let (tui_tx, mut tui_rx) = create_tui()
         .context("Create TUI")?;
 
     let (telnet_tx, mut telnet_rx) = telnet_connection()
         .context("Create connection")?;
+
+    if let Some(address) = args.address {
+        telnet_tx.send(TelnetRequest::Connect(address, args.port)).await
+            .context("Connect from command line")?;
+    }
 
     tokio::spawn(async move {
         loop {
@@ -37,7 +55,7 @@ async fn main() -> Result<(), anyhow::Error> {
                             tui_tx.send(TuiRequest::PrintUserInput(data, 1)).await?;
                         },
                         TuiEvent::Quit => {
-                            telnet_tx.send(TelnetRequest::Disconnect).await?;
+                            telnet_tx.send(TelnetRequest::Shutdown).await?;
                             break;
                         },
                     }
