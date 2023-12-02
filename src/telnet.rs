@@ -13,6 +13,8 @@ pub enum TelnetRequest {
 pub enum TelnetEvent {
     Data(String),
     Unhandled(Event),
+    Info(String),
+    Warning(String),
     Error(anyhow::Error),
 }
 
@@ -53,27 +55,51 @@ struct TelnetConnection {
 
 impl TelnetConnection {
     fn connect(&mut self, address: String, port: u16) -> Result<()> {
+        self.send_info(format!("Connecting to {address}:{port}..."))
+            .context("Inform about connection attempt")?;
+
         self.telnet = Some(
             telnet::Telnet::connect((address, port), 1024*1024)
                 .context("Connect to server")?);
 
+        self.send_info("Connected.".into())
+            .context("Inform about successful connection")?;
+
         Ok(())
     }
 
-    fn reset_connection(&mut self) {
+    fn reset_connection(&mut self) -> Result<()> {
         self.telnet = None;
+
+        self.send_warning("Disconnected.".into())
+            .context("Warn about broken connection")?;
+
+        Ok(())
     }
 
-    fn notify_of_error(&mut self, err: anyhow::Error) -> Result<()> {
+    fn send_info(&mut self, data: String) -> Result<()> {
+        self.tx.blocking_send(TelnetEvent::Info(data))
+            .context("Send info from telnet")
+    }
+
+    fn send_warning(&mut self, data: String) -> Result<()> {
+        self.tx.blocking_send(TelnetEvent::Warning(data))
+            .context("Send warning from telnet")
+    }
+
+    fn send_error(&mut self, err: anyhow::Error) -> Result<()> {
         self.tx.blocking_send(TelnetEvent::Error(err))
-            .context("Notify of error")
+            .context("Send error from telnet")
     }
 
     fn handle_telnet_recv(&mut self) -> Result<()> {
         if let Err(err) = self.handle_telnet_recv_impl() {
             // Assume socket is bad
-            self.reset_connection();
-            self.notify_of_error(err)?;
+            self.send_error(err)
+                .context("Send error information")?;
+
+            self.reset_connection()
+                .context("Reset connection")?;
         }
 
         Ok(())
@@ -115,7 +141,7 @@ impl TelnetConnection {
         match self.handle_request_impl() {
             Ok(shutdown) => { Ok(shutdown) },
             Err(err) => {
-                self.notify_of_error(err)
+                self.send_error(err)
                     .map(|_| false)
                     .context("Notify of error")
             },

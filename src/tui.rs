@@ -18,6 +18,7 @@ use ratatui::{
 pub enum TuiRequest {
     Print(String, usize),
     PrintUserInput(String, usize),
+    PrintInfo(String, usize),
     PrintWarning(String, usize),
     PrintError(String, usize),
 }
@@ -154,11 +155,16 @@ pub fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>), anyhow::
                         buffer.append(&mut line);
                     },
                     TuiRequest::PrintUserInput(data, _) => {
-                        buffer.push(data.light_blue().bold().into());
+                        buffer.push(data.light_cyan().bold().into());
+                    },
+                    TuiRequest::PrintInfo(data, _) => {
+                        for line in data.split('\n') {
+                            buffer.push(format!("[INFO] {line}").light_green().into());
+                        }
                     },
                     TuiRequest::PrintWarning(data, _) => {
                         for line in data.split('\n') {
-                            buffer.push(line.to_string().light_yellow().into());
+                            buffer.push(format!("[WARN] {line}").light_yellow().into());
                         }
                     },
                     TuiRequest::PrintError(data, _) => {

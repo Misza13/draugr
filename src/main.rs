@@ -42,8 +42,14 @@ async fn main() -> Result<(), anyhow::Error> {
                         TelnetEvent::Unhandled(event) => {
                             tui_tx.send(TuiRequest::PrintWarning(format!("Unhandled telnet event: {:?}", event), 1)).await?;
                         },
+                        TelnetEvent::Info(data) => {
+                            tui_tx.send(TuiRequest::PrintInfo(data, 1)).await?;
+                        },
+                        TelnetEvent::Warning(data) => {
+                            tui_tx.send(TuiRequest::PrintWarning(data, 1)).await?;
+                        },
                         TelnetEvent::Error(err) => {
-                            tui_tx.send(TuiRequest::PrintError(format!("{:?}", err), 1)).await?;
+                            tui_tx.send(TuiRequest::PrintError(format!("{:?}", err.context("Connection error")), 1)).await?;
                         },
                     }
                 },
