@@ -118,6 +118,7 @@ impl TelnetConnection {
                     self.tx.blocking_send(TelnetEvent::Data(s))
                         .context("Send data over channel")?;
                 },
+                Event::UnknownIAC(249) => { /* IAC GO AHEAD - used as end-of-prompt signal in some MUDs */},
                 Event::Negotiation(telnet::Action::Will, TelnetOption::Compress2) => {
                     telnet.negotiate(&telnet::Action::Do, TelnetOption::Compress2)
                         .context("Negotiate MCCP2")?;
