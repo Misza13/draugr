@@ -89,8 +89,8 @@ impl<'a> TuiWrapper<'a> {
 
             let chunks = Layout::default()
                 .constraints([
-                    Constraint::Length(area.height - 2),
-                    Constraint::Length(2)
+                    Constraint::Max(9999),
+                    Constraint::Length(2),
                 ])
                 .split(area);
 
@@ -133,9 +133,6 @@ impl<'a> TuiWrapper<'a> {
                             KeyCode::Char('q') => {
                                 self.tx.send(TuiEvent::Quit).await?;
                                 return Ok(true);
-                            },
-                            KeyCode::Char('w') => {
-                                self.tx.send(TuiEvent::Quit).await?;
                             },
                             _ => todo!()
                         }
