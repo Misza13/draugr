@@ -120,12 +120,18 @@ impl TelnetConnection {
                 },
                 Event::UnknownIAC(249) => { /* IAC GO AHEAD - used as end-of-prompt signal in some MUDs */},
                 Event::Negotiation(telnet::Action::Will, TelnetOption::Compress2) => {
+                    self.tx.blocking_send(TelnetEvent::Info("Server supports MCCP2".into()))
+                        .context("Inform of MCCP2 capability")?;
+
                     telnet.negotiate(&telnet::Action::Do, TelnetOption::Compress2)
                         .context("Negotiate MCCP2")?;
                 },
                 Event::Negotiation(_, _) => {},
                 Event::Subnegotiation(TelnetOption::Compress2, _) => {
                     telnet.begin_zlib();
+
+                    self.tx.blocking_send(TelnetEvent::Info("MCCP2 enabled".into()))
+                        .context("Inform of MCCP2 enabled")?;
                 },
                 Event::Subnegotiation(_, _) => {},
                 _ => {
