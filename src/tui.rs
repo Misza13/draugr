@@ -25,6 +25,7 @@ pub enum TuiRequest {
 
 pub enum TuiEvent {
     Send(String),
+    SendSecret(String),
     Quit,
 }
 
@@ -132,57 +133,79 @@ impl<'a> TuiWrapper<'a> {
                         match key.code {
                             KeyCode::Char('q') => {
                                 self.tx.send(TuiEvent::Quit).await?;
+
                                 return Ok(true);
                             },
-                            _ => todo!()
+                            KeyCode::Enter => {
+                                self.tx.send(TuiEvent::SendSecret(self.input_buffer.to_string())).await?;
+                                self.input_buffer.clear();
+                                self.input_index = 0;
+
+                                return Ok(false);
+                            },
+                            _ => {},
                         }
                     } else if key.modifiers == KeyModifiers::SHIFT {
                         match key.code {
                             KeyCode::Char(ch) => {
                                 self.input_buffer.insert(self.input_index, ch.to_ascii_uppercase());
                                 self.input_index += 1;
+
+                                return Ok(false);
                             },
-                            _ => {
-                                self.buffer.push(format!("Unhandled key: {:?}", key).light_yellow().into());
-                            }
+                            _ => {}
                         }
                     } else if key.modifiers == KeyModifiers::NONE {
                         match key.code {
                             KeyCode::Char(ch) => {
                                 self.input_buffer.insert(self.input_index, ch);
                                 self.input_index += 1;
+
+                                return Ok(false);
                             },
                             KeyCode::Backspace => {
                                 if self.input_index > 0 {
                                     self.input_buffer.remove(self.input_index - 1);
                                     self.input_index -= 1;
                                 }
+
+                                return Ok(false);
                             },
                             KeyCode::Right => {
                                 if self.input_index < self.input_buffer.len() {
                                     self.input_index += 1;
                                 }
+
+                                return Ok(false);
                             },
                             KeyCode::Left => {
                                 self.input_index = self.input_index.saturating_sub(1);
+
+                                return Ok(false);
                             },
                             KeyCode::Home => {
                                 self.input_index = 0;
+
+                                return Ok(false);
                             },
                             KeyCode::End => {
                                 self.input_index = self.input_buffer.len();
+
+                                return Ok(false);
                             },
                             KeyCode::Enter => {
                                 self.tx.send(TuiEvent::Send(self.input_buffer.to_string())).await?;
                                 self.input_buffer.clear();
                                 self.input_index = 0;
+
+                                return Ok(false);
                             },
-                            _ => {
-                                self.buffer.push(format!("Unhandled key: {:?}", key).light_yellow().into());
-                            }
+                            _ => {}
                         }
                     }
                 }
+
+                self.buffer.push(format!("Unhandled key: {:?}", key).light_yellow().into());
             }
         }
 

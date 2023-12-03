@@ -60,6 +60,10 @@ async fn main() -> Result<(), anyhow::Error> {
                             telnet_tx.send(TelnetRequest::Send(data.clone())).await?;
                             tui_tx.send(TuiRequest::PrintUserInput(data, 1)).await?;
                         },
+                        TuiEvent::SendSecret(data) => {
+                            telnet_tx.send(TelnetRequest::Send(data.clone())).await?;
+                            tui_tx.send(TuiRequest::PrintUserInput("*****".into(), 1)).await?;
+                        },
                         TuiEvent::Quit => {
                             telnet_tx.send(TelnetRequest::Shutdown).await?;
                             break;
