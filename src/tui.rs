@@ -12,7 +12,7 @@ use crossterm::{
 };
 use ratatui::{
     prelude::*,
-    widgets::*,
+    widgets::{*, block::*},
 };
 
 pub enum TuiRequest {
@@ -106,6 +106,11 @@ impl<'a> TuiWrapper<'a> {
 
             frame.render_widget(
                 Paragraph::new(Text::from(last))
+                    .block(Block::default()
+                        .title(Title::from(vec!["[".yellow(), "1".dark_gray(), "]".yellow()])
+                        .alignment(Alignment::Center))
+                        .borders(Borders::TOP)
+                        .border_style(Style::default().fg(Color::Yellow)))
                     .wrap(Wrap { trim: false })
                     .scroll((wraps, 0)),
                 chunks[0],
@@ -113,7 +118,8 @@ impl<'a> TuiWrapper<'a> {
 
             frame.render_widget(
                 Paragraph::new(self.input_buffer.as_str())
-                    .block(Block::default().borders(Borders::TOP)),
+                    .block(Block::default().borders(Borders::TOP)
+                    .border_style(Style::default().fg(Color::Yellow))),
                 chunks[1]
             );
 
