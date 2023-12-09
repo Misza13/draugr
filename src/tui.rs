@@ -1,9 +1,9 @@
 use std::io::{stdout, Stdout};
 use ansi_to_tui::IntoText;
 use tokio::sync::mpsc::{channel, Sender, Receiver};
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, Error};
 use crossterm::{
-    event::{self, KeyCode, KeyEventKind, KeyModifiers, KeyEvent},
+    event::{self, KeyCode, KeyEventKind, KeyModifiers},
     terminal::{
         disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
         LeaveAlternateScreen,
@@ -158,32 +158,40 @@ impl<'a> TuiWrapper<'a> {
 
                         /* Lowercase characters */
                         (KeyModifiers::NONE, KeyCode::Char(ch)) => {
-                            self.input_buffer.insert(self.input_index, ch);
+                            self.input_buffer = insert_string(
+                                &self.input_buffer,
+                                ch.to_string(),
+                                self.input_index)
+                                .context("Insert character to input string")?;
                             self.input_index += 1;
                         },
                         /* Uppercase characters */
                         (KeyModifiers::SHIFT, KeyCode::Char(ch)) => {
-                            self.input_buffer.insert(self.input_index, ch.to_ascii_uppercase());
-                            self.input_index += 1;
+                            self.input_buffer = insert_string(
+                                &self.input_buffer,
+                                ch.to_uppercase().to_string(),
+                                self.input_index)
+                                .context("Insert character to input string")?;
+                            self.input_index += ch.to_ascii_uppercase().to_string().chars().count();
                         },
 
                         /* Backspace */
                         (KeyModifiers::NONE, KeyCode::Backspace) => {
                             if self.input_index > 0 {
-                                self.input_buffer.remove(self.input_index - 1);
-                                self.input_index -= 1;
+                                self.input_buffer = del_from_string(&self.input_buffer, self.input_index - 1)
+                                    .context("Remove character from input string (Backspace)")?;
+                                self.input_index = self.input_index.saturating_sub(1);
                             }
                         },
                         /* Delete */
                         (KeyModifiers::NONE, KeyCode::Delete) => {
-                            if self.input_index < self.input_buffer.len() {
-                                self.input_buffer.remove(self.input_index);
-                            }
+                            self.input_buffer = del_from_string(&self.input_buffer, self.input_index)
+                                .context("Remove character from input string (Delete)")?;
                         },
 
                         /* Navigation */
                         (KeyModifiers::NONE, KeyCode::Right) => {
-                            if self.input_index < self.input_buffer.len() {
+                            if self.input_index < self.input_buffer.chars().count() {
                                 self.input_index += 1;
                             }
                         },
@@ -194,7 +202,7 @@ impl<'a> TuiWrapper<'a> {
                             self.input_index = 0;
                         },
                         (KeyModifiers::NONE, KeyCode::End) => {
-                            self.input_index = self.input_buffer.len();
+                            self.input_index = self.input_buffer.chars().count();
                         },
 
                         /* Unhandled */
@@ -241,4 +249,32 @@ impl<'a> TuiWrapper<'a> {
 
         Ok(())
     }
+}
+
+fn insert_string(source: &String, what: String, position: usize) -> Result<String> {
+    if position > source.chars().count() {
+        return Err(Error::msg("Insert position out of bounds"));
+    }
+
+    let byte_position = source.char_indices().nth(position).map_or(source.len(), |(idx, _)| idx);
+
+    let (before, after) = source.split_at(byte_position);
+
+    Ok(format!("{before}{what}{after}"))
+}
+
+fn del_from_string(source: &String, position: usize) -> Result<String> {
+    let source_len = source.chars().count();
+
+    if position > source_len {
+        return Err(Error::msg("Deletion position out of bounds"));
+    } else if position == source_len {
+        return Ok(source.to_owned());
+    }
+
+    let byte_position = source.char_indices().nth(position).map_or(source.len(), |(idx, _)| idx);
+
+    let (before, after) = source.split_at(byte_position);
+
+    Ok(format!("{before}{}", after.chars().skip(1).collect::<String>()))
 }
