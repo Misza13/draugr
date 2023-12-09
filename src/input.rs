@@ -57,18 +57,24 @@ impl InputLine {
 
     pub fn backspace(&mut self) {
         if self.cursor_position > 0 {
-            self.buffer = del_from_string(&self.buffer, self.cursor_position - 1);
+            self.buffer = del_from_string(
+                std::mem::take(&mut self.buffer),
+                self.cursor_position - 1);
             self.cursor_position = self.cursor_position.saturating_sub(1);
         }
     }
 
     pub fn delete(&mut self) {
-        self.buffer = del_from_string(&self.buffer, self.cursor_position);
+        self.buffer = del_from_string(
+            std::mem::take(&mut self.buffer),
+            self.cursor_position);
     }
 }
 
 /// Insert a string into another at a given character (not byte) position.
-/// Returns modified string or, if `position` is out of bounds, unmodified string.
+///
+/// Returns modified string.
+/// If `position` is out of bounds, returns unmodified string.
 ///
 /// Should not panic as out-of-bounds are checked for and respects codepoint boundaries.
 fn insert_string(source: String, what: &String, position: usize) -> String {
@@ -84,10 +90,12 @@ fn insert_string(source: String, what: &String, position: usize) -> String {
 }
 
 /// Remove a character from a string at a given character (not byte) position.
-/// Returns modified string or, if `position` is out of bounds or `source` is empty, unmodified string.
+///
+/// Returns modified string.
+/// If `position` is out of bounds or `source` is empty, returns unmodified string.
 ///
 /// Should not panic as out-of-bounds are checked for and respects codepoint boundaries.
-fn del_from_string(source: &String, position: usize) -> String {
+fn del_from_string(source: String, position: usize) -> String {
     let source_len = source.chars().count();
 
     if source_len == 0 || position >= source_len {
