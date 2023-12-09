@@ -1,7 +1,7 @@
 use std::io::{stdout, Stdout};
 use ansi_to_tui::IntoText;
 use tokio::sync::mpsc::{channel, Sender, Receiver};
-use anyhow::{Context, Result, Error};
+use anyhow::{Context, Result};
 use crossterm::{
     event::{self, KeyCode, KeyEventKind, KeyModifiers},
     terminal::{
@@ -14,6 +14,7 @@ use ratatui::{
     prelude::*,
     widgets::{*, block::*},
 };
+use crate::input::InputLine;
 
 pub enum TuiRequest {
     Print(String, usize),
@@ -45,9 +46,9 @@ pub fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>), anyhow::
             rx: req_rx,
             tx: ev_tx,
 
+            input: InputLine::new(),
+
             buffer: vec!["Welcome to Draugr! (press 'Alt+q' to quit)\n".into()],
-            input_buffer: String::from(""),
-            input_index: 0,
         };
 
         loop {
@@ -78,9 +79,9 @@ struct TuiWrapper<'a> {
     rx: Receiver<TuiRequest>,
     tx: Sender<TuiEvent>,
 
+    input: InputLine,
+
     buffer: Vec<Line<'a>>,
-    input_buffer: String,
-    input_index: usize,
 }
 
 impl<'a> TuiWrapper<'a> {
@@ -117,14 +118,14 @@ impl<'a> TuiWrapper<'a> {
             );
 
             frame.render_widget(
-                Paragraph::new(self.input_buffer.as_str())
+                Paragraph::new(self.input.as_line())
                     .block(Block::default().borders(Borders::TOP)
                     .border_style(Style::default().fg(Color::Yellow))),
                 chunks[1]
             );
 
             frame.set_cursor(
-                chunks[1].left() + self.input_index as u16,
+                chunks[1].left() + self.input.cursor_position() as u16,
                 chunks[1].bottom());
         }).context("Draw to terminal")?;
 
@@ -145,65 +146,34 @@ impl<'a> TuiWrapper<'a> {
 
                         /* Enter = submit input */
                         (KeyModifiers::NONE, KeyCode::Enter) => {
-                            self.tx.send(TuiEvent::Send(self.input_buffer.to_string())).await?;
-                            self.input_buffer.clear();
-                            self.input_index = 0;
+                            self.tx.send(TuiEvent::Send(self.input.get_buffer_and_clear())).await
+                                .context("Submit user input")?;
                         },
                         /* Alt+Enter = submit secret (e.g. password) */
                         (KeyModifiers::ALT, KeyCode::Enter) => {
-                            self.tx.send(TuiEvent::SendSecret(self.input_buffer.to_string())).await?;
-                            self.input_buffer.clear();
-                            self.input_index = 0;
+                            self.tx.send(TuiEvent::SendSecret(self.input.get_buffer_and_clear())).await
+                                .context("Submit secret user input")?;
                         },
 
                         /* Lowercase characters */
                         (KeyModifiers::NONE, KeyCode::Char(ch)) => {
-                            self.input_buffer = insert_string(
-                                &self.input_buffer,
-                                ch.to_string(),
-                                self.input_index)
-                                .context("Insert character to input string")?;
-                            self.input_index += 1;
+                            self.input.type_string(ch.to_string());
                         },
                         /* Uppercase characters */
                         (KeyModifiers::SHIFT, KeyCode::Char(ch)) => {
-                            self.input_buffer = insert_string(
-                                &self.input_buffer,
-                                ch.to_uppercase().to_string(),
-                                self.input_index)
-                                .context("Insert character to input string")?;
-                            self.input_index += ch.to_ascii_uppercase().to_string().chars().count();
+                            self.input.type_string(ch.to_ascii_uppercase().to_string());
                         },
 
                         /* Backspace */
-                        (KeyModifiers::NONE, KeyCode::Backspace) => {
-                            if self.input_index > 0 {
-                                self.input_buffer = del_from_string(&self.input_buffer, self.input_index - 1)
-                                    .context("Remove character from input string (Backspace)")?;
-                                self.input_index = self.input_index.saturating_sub(1);
-                            }
-                        },
+                        (KeyModifiers::NONE, KeyCode::Backspace) => { self.input.backspace(); },
                         /* Delete */
-                        (KeyModifiers::NONE, KeyCode::Delete) => {
-                            self.input_buffer = del_from_string(&self.input_buffer, self.input_index)
-                                .context("Remove character from input string (Delete)")?;
-                        },
+                        (KeyModifiers::NONE, KeyCode::Delete) => { self.input.delete(); },
 
                         /* Navigation */
-                        (KeyModifiers::NONE, KeyCode::Right) => {
-                            if self.input_index < self.input_buffer.chars().count() {
-                                self.input_index += 1;
-                            }
-                        },
-                        (KeyModifiers::NONE, KeyCode::Left) => {
-                            self.input_index = self.input_index.saturating_sub(1);
-                        },
-                        (KeyModifiers::NONE, KeyCode::Home) => {
-                            self.input_index = 0;
-                        },
-                        (KeyModifiers::NONE, KeyCode::End) => {
-                            self.input_index = self.input_buffer.chars().count();
-                        },
+                        (KeyModifiers::NONE, KeyCode::Right) => { self.input.right(); },
+                        (KeyModifiers::NONE, KeyCode::Left) => { self.input.left(); },
+                        (KeyModifiers::NONE, KeyCode::Home) => { self.input.home(); },
+                        (KeyModifiers::NONE, KeyCode::End) => { self.input.end(); },
 
                         /* Unhandled */
                         _ => {
@@ -249,32 +219,4 @@ impl<'a> TuiWrapper<'a> {
 
         Ok(())
     }
-}
-
-fn insert_string(source: &String, what: String, position: usize) -> Result<String> {
-    if position > source.chars().count() {
-        return Err(Error::msg("Insert position out of bounds"));
-    }
-
-    let byte_position = source.char_indices().nth(position).map_or(source.len(), |(idx, _)| idx);
-
-    let (before, after) = source.split_at(byte_position);
-
-    Ok(format!("{before}{what}{after}"))
-}
-
-fn del_from_string(source: &String, position: usize) -> Result<String> {
-    let source_len = source.chars().count();
-
-    if position > source_len {
-        return Err(Error::msg("Deletion position out of bounds"));
-    } else if position == source_len {
-        return Ok(source.to_owned());
-    }
-
-    let byte_position = source.char_indices().nth(position).map_or(source.len(), |(idx, _)| idx);
-
-    let (before, after) = source.split_at(byte_position);
-
-    Ok(format!("{before}{}", after.chars().skip(1).collect::<String>()))
 }

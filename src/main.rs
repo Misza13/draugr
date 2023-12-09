@@ -6,6 +6,7 @@ use crate::tui::*;
 
 mod telnet;
 mod tui;
+mod input;
 
 #[derive(Parser, Debug)]
 struct Args {
