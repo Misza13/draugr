@@ -3,7 +3,7 @@ use ansi_to_tui::IntoText;
 use tokio::sync::mpsc::{channel, Sender, Receiver};
 use anyhow::{Context, Result};
 use crossterm::{
-    event::{self, KeyCode, KeyEventKind, KeyModifiers},
+    event::{self, KeyCode, KeyEventKind, KeyModifiers, KeyEvent},
     terminal::{
         disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
         LeaveAlternateScreen,
@@ -135,83 +135,74 @@ impl<'a> TuiWrapper<'a> {
         if let Ok(true) = event::poll(std::time::Duration::from_millis(20)) {
             if let event::Event::Key(key) = event::read().context("Read key event")? {
                 if key.kind == KeyEventKind::Press {
-                    if key.modifiers  == KeyModifiers::ALT {
-                        match key.code {
-                            KeyCode::Char('q') => {
-                                self.tx.send(TuiEvent::Quit).await?;
+                    match (key.modifiers, key.code) {
+                        /* Alt+q = Exit program */
+                        (KeyModifiers::ALT, KeyCode::Char('q')) => {
+                            self.tx.send(TuiEvent::Quit).await?;
 
-                                return Ok(true);
-                            },
-                            KeyCode::Enter => {
-                                self.tx.send(TuiEvent::SendSecret(self.input_buffer.to_string())).await?;
-                                self.input_buffer.clear();
-                                self.input_index = 0;
+                            return Ok(true);
+                        },
 
-                                return Ok(false);
-                            },
-                            _ => {},
-                        }
-                    } else if key.modifiers == KeyModifiers::SHIFT {
-                        match key.code {
-                            KeyCode::Char(ch) => {
-                                self.input_buffer.insert(self.input_index, ch.to_ascii_uppercase());
+                        /* Enter = submit input */
+                        (KeyModifiers::NONE, KeyCode::Enter) => {
+                            self.tx.send(TuiEvent::Send(self.input_buffer.to_string())).await?;
+                            self.input_buffer.clear();
+                            self.input_index = 0;
+                        },
+                        /* Alt+Enter = submit secret (e.g. password) */
+                        (KeyModifiers::ALT, KeyCode::Enter) => {
+                            self.tx.send(TuiEvent::SendSecret(self.input_buffer.to_string())).await?;
+                            self.input_buffer.clear();
+                            self.input_index = 0;
+                        },
+
+                        /* Lowercase characters */
+                        (KeyModifiers::NONE, KeyCode::Char(ch)) => {
+                            self.input_buffer.insert(self.input_index, ch);
+                            self.input_index += 1;
+                        },
+                        /* Uppercase characters */
+                        (KeyModifiers::SHIFT, KeyCode::Char(ch)) => {
+                            self.input_buffer.insert(self.input_index, ch.to_ascii_uppercase());
+                            self.input_index += 1;
+                        },
+
+                        /* Backspace */
+                        (KeyModifiers::NONE, KeyCode::Backspace) => {
+                            if self.input_index > 0 {
+                                self.input_buffer.remove(self.input_index - 1);
+                                self.input_index -= 1;
+                            }
+                        },
+                        /* Delete */
+                        (KeyModifiers::NONE, KeyCode::Delete) => {
+                            if self.input_index < self.input_buffer.len() {
+                                self.input_buffer.remove(self.input_index);
+                            }
+                        },
+
+                        /* Navigation */
+                        (KeyModifiers::NONE, KeyCode::Right) => {
+                            if self.input_index < self.input_buffer.len() {
                                 self.input_index += 1;
+                            }
+                        },
+                        (KeyModifiers::NONE, KeyCode::Left) => {
+                            self.input_index = self.input_index.saturating_sub(1);
+                        },
+                        (KeyModifiers::NONE, KeyCode::Home) => {
+                            self.input_index = 0;
+                        },
+                        (KeyModifiers::NONE, KeyCode::End) => {
+                            self.input_index = self.input_buffer.len();
+                        },
 
-                                return Ok(false);
-                            },
-                            _ => {}
-                        }
-                    } else if key.modifiers == KeyModifiers::NONE {
-                        match key.code {
-                            KeyCode::Char(ch) => {
-                                self.input_buffer.insert(self.input_index, ch);
-                                self.input_index += 1;
-
-                                return Ok(false);
-                            },
-                            KeyCode::Backspace => {
-                                if self.input_index > 0 {
-                                    self.input_buffer.remove(self.input_index - 1);
-                                    self.input_index -= 1;
-                                }
-
-                                return Ok(false);
-                            },
-                            KeyCode::Right => {
-                                if self.input_index < self.input_buffer.len() {
-                                    self.input_index += 1;
-                                }
-
-                                return Ok(false);
-                            },
-                            KeyCode::Left => {
-                                self.input_index = self.input_index.saturating_sub(1);
-
-                                return Ok(false);
-                            },
-                            KeyCode::Home => {
-                                self.input_index = 0;
-
-                                return Ok(false);
-                            },
-                            KeyCode::End => {
-                                self.input_index = self.input_buffer.len();
-
-                                return Ok(false);
-                            },
-                            KeyCode::Enter => {
-                                self.tx.send(TuiEvent::Send(self.input_buffer.to_string())).await?;
-                                self.input_buffer.clear();
-                                self.input_index = 0;
-
-                                return Ok(false);
-                            },
-                            _ => {}
-                        }
+                        /* Unhandled */
+                        _ => {
+                            self.buffer.push(format!("Unhandled key: {:?}", key).light_yellow().into());
+                        },
                     }
                 }
-
-                self.buffer.push(format!("Unhandled key: {:?}", key).light_yellow().into());
             }
         }
 
