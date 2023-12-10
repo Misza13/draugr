@@ -4,9 +4,10 @@ use clap::{Parser, arg};
 use crate::telnet::*;
 use crate::tui::*;
 
+mod input;
+mod ring;
 mod telnet;
 mod tui;
-mod input;
 
 #[derive(Parser, Debug)]
 struct Args {

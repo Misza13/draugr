@@ -146,12 +146,12 @@ impl<'a> TuiWrapper<'a> {
 
                         /* Enter = submit input */
                         (KeyModifiers::NONE, KeyCode::Enter) => {
-                            self.tx.send(TuiEvent::Send(self.input.get_buffer_and_clear())).await
+                            self.tx.send(TuiEvent::Send(self.input.get_and_submit())).await
                                 .context("Submit user input")?;
                         },
                         /* Alt+Enter = submit secret (e.g. password) */
                         (KeyModifiers::ALT, KeyCode::Enter) => {
-                            self.tx.send(TuiEvent::SendSecret(self.input.get_buffer_and_clear())).await
+                            self.tx.send(TuiEvent::SendSecret(self.input.get_and_clear())).await
                                 .context("Submit secret user input")?;
                         },
 
@@ -174,6 +174,11 @@ impl<'a> TuiWrapper<'a> {
                         (KeyModifiers::NONE, KeyCode::Left) => { self.input.left(); },
                         (KeyModifiers::NONE, KeyCode::Home) => { self.input.home(); },
                         (KeyModifiers::NONE, KeyCode::End) => { self.input.end(); },
+                        (KeyModifiers::NONE, KeyCode::Up) => { self.input.up() }
+                        (KeyModifiers::NONE, KeyCode::Down) => { self.input.down() }
+
+                        /* Escape = cancel completion suggestions */
+                        (KeyModifiers::NONE, KeyCode::Esc) => { self.input.cancel(); }
 
                         /* Unhandled */
                         _ => {
