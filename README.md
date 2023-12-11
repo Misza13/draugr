@@ -3,6 +3,6 @@
 ## Feature roadmap
 
 - [x] [MCCP2](https://tintin.mudhalla.net/protocols/mccp/) support
-- [ ] Smart, searchable input history [fish shell](https://fishshell.com/)-style
+- [x] Smart, searchable input history, [fish shell](https://fishshell.com/)-style
 - [ ] Fully configurable UI layout, allowing for multiple scrollable and searchable buffers with rules-based routing of MUD output
 - [ ] Fully scriptable using [Rhai](https://rhai.rs/) language, allowing advanced triggers and automation of gameplay
