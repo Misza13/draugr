@@ -10,11 +10,9 @@ use crossterm::{
     },
     ExecutableCommand,
 };
-use ratatui::{
-    prelude::*,
-    widgets::{*, block::*},
-};
-use crate::input::InputPane;
+use ratatui::prelude::*;
+
+use crate::{input::InputPane, panes::ScrollPane};
 
 pub enum TuiRequest {
     Print(String, usize),
@@ -48,8 +46,10 @@ pub fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>), anyhow::
 
             input: InputPane::new(),
 
-            buffer: vec!["Welcome to Draugr! (press 'Alt+q' to quit)\n".into()],
+            pane1: ScrollPane::new(10000),
         };
+
+        tui.pane1.push("Welcome to Draugr! (press 'Alt+q' to quit)\n".into());
 
         loop {
             tui.render_ui()
@@ -81,7 +81,7 @@ struct TuiWrapper<'a> {
 
     input: InputPane,
 
-    buffer: Vec<Line<'a>>,
+    pane1: ScrollPane<'a>,
 }
 
 impl<'a> TuiWrapper<'a> {
@@ -96,26 +96,7 @@ impl<'a> TuiWrapper<'a> {
                 ])
                 .split(area);
 
-            let max_lines = chunks[0].height as usize;
-            let last: Vec<Line> = if self.buffer.len() > max_lines {
-                self.buffer.iter().skip(self.buffer.len() - max_lines).cloned().collect()
-            } else {
-                self.buffer.to_vec()
-            };
-
-            let wraps: u16 = last.iter().map(|l| { (l.width().saturating_sub(1) as u16) / chunks[0].width }).sum();
-
-            frame.render_widget(
-                Paragraph::new(Text::from(last))
-                    .block(Block::default()
-                        .title(Title::from(vec!["[".yellow(), "1".dark_gray(), "]".yellow()])
-                        .alignment(Alignment::Center))
-                        .borders(Borders::TOP)
-                        .border_style(Style::default().fg(Color::Yellow)))
-                    .wrap(Wrap { trim: false })
-                    .scroll((wraps, 0)),
-                chunks[0],
-            );
+            self.pane1.render(frame, chunks[0]);
 
             self.input.render(frame, chunks[1]);
         }).context("Draw to terminal")?;
@@ -173,7 +154,7 @@ impl<'a> TuiWrapper<'a> {
 
                         /* Unhandled */
                         _ => {
-                            self.buffer.push(format!("Unhandled key: {:?}", key).light_yellow().into());
+                            self.pane1.push(format!("Unhandled key: {:?}", key).light_yellow().into());
                         },
                     }
                 }
@@ -187,27 +168,27 @@ impl<'a> TuiWrapper<'a> {
         if let Ok(recv) = self.rx.try_recv() {
             match recv {
                 TuiRequest::Print(data, _) => {
-                    let mut line = data.into_text()
+                    let line = data.into_text()
                         .context("Parse ANSI color codes")?
                         .lines;
-                    self.buffer.append(&mut line);
+                    self.pane1.append(line);
                 },
                 TuiRequest::PrintUserInput(data, _) => {
-                    self.buffer.push(data.light_cyan().bold().into());
+                    self.pane1.push(data.light_cyan().bold().into());
                 },
                 TuiRequest::PrintInfo(data, _) => {
                     for line in data.split('\n') {
-                        self.buffer.push(format!("[INFO] {line}").light_green().into());
+                        self.pane1.push(format!("[INFO] {line}").light_green().into());
                     }
                 },
                 TuiRequest::PrintWarning(data, _) => {
                     for line in data.split('\n') {
-                        self.buffer.push(format!("[WARN] {line}").light_yellow().into());
+                        self.pane1.push(format!("[WARN] {line}").light_yellow().into());
                     }
                 },
                 TuiRequest::PrintError(data, _) => {
                     for line in data.split('\n') {
-                        self.buffer.push(format!("[ERR] {line}").light_red().into());
+                        self.pane1.push(format!("[ERR] {line}").light_red().into());
                     }
                 },
             }

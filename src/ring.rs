@@ -81,6 +81,10 @@ impl<T: Clone + PartialEq> RingBuffer<T> {
         &self.buffer[(self.front + index) % self.buffer.len()]
     }
 
+    pub fn iter_from_back<'a>(&'a self) -> Box<dyn Iterator<Item = T> + 'a> {
+        Box::new(RingBufferIterator::from(self, |x| x.saturating_sub(1)))
+    }
+
     pub fn find_backwards(&self, pred: impl Fn(&T) -> bool, start_at: usize) -> Option<usize> {
         let mut iter = start_at;
         while let Some(value) = &self.get(iter) {
@@ -113,5 +117,44 @@ impl<T: Clone + PartialEq> RingBuffer<T> {
         }
 
         None
+    }
+}
+
+pub struct RingBufferIterator<'a, T: Clone + PartialEq + 'a> {
+    buffer: &'a RingBuffer<T>,
+    position: usize,
+    position_mut: fn(usize) -> usize,
+    done: bool,
+}
+
+impl <'a, T: Clone + PartialEq + 'a> RingBufferIterator<'a, T> {
+    fn from(buffer: &'a RingBuffer<T>, position_mut: fn(usize) -> usize) -> RingBufferIterator<'_, T> {
+        RingBufferIterator {
+            buffer,
+            position: buffer.size().saturating_sub(1),
+            position_mut,
+            done: false,
+        }
+    }
+}
+
+impl<'a, T: Clone + PartialEq> Iterator for RingBufferIterator<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            None
+        } else if let Some(value) = self.buffer.get(self.position) {
+            let new_position = (self.position_mut)(self.position);
+            if new_position == self.position {
+                self.done = true;
+            }
+
+            self.position = new_position;
+
+            Some(value.clone())
+        } else {
+            None
+        }
     }
 }
