@@ -1,8 +1,11 @@
-use ratatui::{text::Line, style::Stylize};
+use ratatui::{
+    prelude::*,
+    widgets::*,
+};
 
 use crate::ring::RingBuffer;
 
-pub struct InputLine {
+pub struct InputPane {
     state: InputState,
 
     history: RingBuffer<String>,
@@ -25,9 +28,9 @@ impl InputState {
     }
 }
 
-impl InputLine {
-    pub fn new() -> InputLine {
-        InputLine {
+impl InputPane {
+    pub fn new() -> InputPane {
+        InputPane {
             state: InputState::empty_typing(),
 
             history: RingBuffer::new(1000),
@@ -71,6 +74,19 @@ impl InputLine {
 
         self.state = new_state;
         result.clone()
+    }
+
+    pub fn render(&self, frame: &mut Frame<'_>, area: Rect) {
+        frame.render_widget(
+            Paragraph::new(self.as_line())
+                .block(Block::default().borders(Borders::TOP)
+                .border_style(Style::default().fg(Color::Yellow))),
+            area
+        );
+
+        frame.set_cursor(
+            area.left() + self.cursor_position() as u16,
+            area.bottom());
     }
 
     pub fn as_line(&self) -> Line {

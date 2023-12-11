@@ -14,7 +14,7 @@ use ratatui::{
     prelude::*,
     widgets::{*, block::*},
 };
-use crate::input::InputLine;
+use crate::input::InputPane;
 
 pub enum TuiRequest {
     Print(String, usize),
@@ -46,7 +46,7 @@ pub fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>), anyhow::
             rx: req_rx,
             tx: ev_tx,
 
-            input: InputLine::new(),
+            input: InputPane::new(),
 
             buffer: vec!["Welcome to Draugr! (press 'Alt+q' to quit)\n".into()],
         };
@@ -79,7 +79,7 @@ struct TuiWrapper<'a> {
     rx: Receiver<TuiRequest>,
     tx: Sender<TuiEvent>,
 
-    input: InputLine,
+    input: InputPane,
 
     buffer: Vec<Line<'a>>,
 }
@@ -117,16 +117,7 @@ impl<'a> TuiWrapper<'a> {
                 chunks[0],
             );
 
-            frame.render_widget(
-                Paragraph::new(self.input.as_line())
-                    .block(Block::default().borders(Borders::TOP)
-                    .border_style(Style::default().fg(Color::Yellow))),
-                chunks[1]
-            );
-
-            frame.set_cursor(
-                chunks[1].left() + self.input.cursor_position() as u16,
-                chunks[1].bottom());
+            self.input.render(frame, chunks[1]);
         }).context("Draw to terminal")?;
 
         Ok(())
