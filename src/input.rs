@@ -117,7 +117,7 @@ impl InputPane {
                 *cursor_position
             },
             InputState::HistorySearch { search_term, index } => {
-                if search_term == "" {
+                if search_term.is_empty() {
                     self.history.get(*index).as_deref().unwrap_or_default().len()
                 } else {
                     search_term.chars().count()
@@ -127,16 +127,15 @@ impl InputPane {
     }
 
     pub fn type_string(&mut self, stuff: String) {
-        match &mut self.state {
-            InputState::Typing { buffer, cursor_position } => {
-                *buffer = insert_string(
-                    std::mem::take(buffer),
-                    &stuff,
-                    *cursor_position);
+        self.cancel_history_search();
 
-                *cursor_position += stuff.chars().count();
-            },
-            _ => {},
+        if let InputState::Typing { buffer, cursor_position } = &mut self.state {
+            *buffer = insert_string(
+                std::mem::take(buffer),
+                &stuff,
+                *cursor_position);
+
+            *cursor_position += stuff.chars().count();
         }
     }
 
