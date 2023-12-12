@@ -46,7 +46,7 @@ pub fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>), anyhow::
 
             input: InputPane::new(),
 
-            pane1: ScrollPane::new(10000),
+            pane1: ScrollPane::new(2000),
         };
 
         tui.pane1.push("Welcome to Draugr! (press 'Alt+q' to quit)\n".into());
@@ -148,6 +148,8 @@ impl<'a> TuiWrapper<'a> {
                         (KeyModifiers::NONE, KeyCode::End) => { self.input.end(); },
                         (KeyModifiers::NONE, KeyCode::Up) => { self.input.up() }
                         (KeyModifiers::NONE, KeyCode::Down) => { self.input.down() }
+                        (KeyModifiers::NONE, KeyCode::PageUp) => { self.pane1.page_up(); }
+                        (KeyModifiers::NONE, KeyCode::PageDown) => { self.pane1.page_down(); }
 
                         /* Escape = cancel completion suggestions */
                         (KeyModifiers::NONE, KeyCode::Esc) => { self.input.cancel(); }

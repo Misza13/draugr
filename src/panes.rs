@@ -9,14 +9,20 @@ pub struct ScrollPane<'a> {
     buffer: RingBuffer<Line<'a>>,
 
     scroll_offset: usize,
+
+    last_seen_area: Rect,
 }
 
 impl<'a> ScrollPane<'a> {
     pub fn new(capacity: usize) -> ScrollPane<'a> {
-        ScrollPane { buffer: RingBuffer::new(capacity), scroll_offset: 0 }
+        ScrollPane {
+            buffer: RingBuffer::new(capacity),
+            scroll_offset: 0,
+            last_seen_area: Rect::new(0, 0, 1, 1),
+        }
     }
 
-    pub fn render(&self, frame: &mut Frame<'_>, area: Rect) {
+    pub fn render(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let mut last: Vec<Line> = self.buffer
             .iter_from_back()
             .skip(self.scroll_offset)
@@ -37,10 +43,16 @@ impl<'a> ScrollPane<'a> {
                 .scroll((wraps, 0)),
             area,
         );
+
+        self.last_seen_area = area;
     }
 
     pub fn push(&mut self, line: Line<'a>) {
         self.buffer.push_back(line);
+        if self.scroll_offset > 0 {
+            self.scroll_offset = (self.scroll_offset + 1)
+                .min(self.buffer.capacity() - self.last_seen_area.height as usize);
+        }
     }
 
     pub fn append(&mut self, lines: Vec<Line<'a>>) {
@@ -48,4 +60,14 @@ impl<'a> ScrollPane<'a> {
             self.push(line);
         }
     }
+
+    pub fn page_up(&mut self) {
+        self.scroll_offset = (self.scroll_offset + self.last_seen_area.height as usize / 2)
+            .min(self.buffer.capacity() - self.last_seen_area.height as usize);
+    }
+
+    pub fn page_down(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(self.last_seen_area.height as usize / 2);
+    }
+
 }
