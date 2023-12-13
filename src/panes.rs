@@ -51,7 +51,7 @@ impl<'a> ScrollPane<'a> {
         self.buffer.push_back(line);
         if self.scroll_offset > 0 {
             self.scroll_offset = (self.scroll_offset + 1)
-                .min(self.buffer.capacity() - self.last_seen_area.height as usize);
+                .min(self.buffer.size() - self.last_seen_area.height as usize);
         }
     }
 
@@ -63,7 +63,7 @@ impl<'a> ScrollPane<'a> {
 
     pub fn page_up(&mut self) {
         self.scroll_offset = (self.scroll_offset + self.last_seen_area.height as usize / 2)
-            .min(self.buffer.capacity() - self.last_seen_area.height as usize);
+            .min(self.buffer.size() - self.last_seen_area.height as usize);
     }
 
     pub fn page_down(&mut self) {

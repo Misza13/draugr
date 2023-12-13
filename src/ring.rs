@@ -10,9 +10,9 @@ impl<T: Clone + PartialEq> RingBuffer<T> {
         RingBuffer { buffer: vec![None; capacity], front: 0, back: 0 }
     }
 
-    pub fn capacity(&self) -> usize {
+    /* pub fn capacity(&self) -> usize {
         self.buffer.capacity()
-    }
+    } */
 
     pub fn size(&self) -> usize {
         if self.is_full() {
