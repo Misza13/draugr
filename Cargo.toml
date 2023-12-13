@@ -16,6 +16,7 @@ bytes = "1.5"
 clap = { version = "4.4", features = ["derive"] }
 crossterm = "0.27"
 ratatui = { version = "0.24", features = ["crossterm"] }
+regex = "1.10"
 rhai = "1.16"
 telnet = { version="0.2", features = ["zcstream"] }
 tokio = { version = "1.34", features = ["full"] }
