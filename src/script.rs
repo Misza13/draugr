@@ -159,9 +159,17 @@ impl ScriptEngine {
 
             let ev_tx_cl = ev_tx.clone();
             engine.register_fn("set_layout", move |layout: Map| -> ScriptFunctionResult<()> {
-                let layout = map_to_layout(layout)
+                let mut layout = map_to_layout(layout)
                     .context("Parse layout data")
                     .map_err(script_error_mapper)?;
+
+                if layout.input().is_none() {
+                    return Err("Layout must include an input".into());
+                }
+
+                if layout.pane(1).is_none() { // TODO: it must be a scroll pane
+                    return Err("Layout must include default pane (id = 1)".into());
+                }
 
                 ev_tx_cl.blocking_send(ScriptEngineEvent::SetLayout(layout))
                     .context("Emit set layout event")

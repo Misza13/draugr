@@ -255,8 +255,6 @@ pub enum LayoutPane {
 impl LayoutElement {
     pub fn from(layout: Map) -> Result<LayoutElement> {
         /* TODO:
-         * - validate presence of an input pane
-         * - validate presence of scroll pane with id = 1
          * - move over buffers, if given
          */
         let element_type: String = layout.get("type")
