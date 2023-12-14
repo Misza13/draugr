@@ -2,7 +2,9 @@ use regex::Regex;
 use tokio::sync::mpsc::{channel, Sender, Receiver};
 use tokio::sync::oneshot;
 use anyhow::{Context, Result, Error};
-use rhai::{Engine, EvalAltResult};
+use rhai::{Engine, EvalAltResult, Map};
+
+use crate::tui::LayoutElement;
 
 pub enum ScriptEngineRequest {
     Output(String),
@@ -14,6 +16,7 @@ pub enum ScriptEngineEvent {
     Connect(String, u16),
     Send(String),
     SendSecret(String),
+    SetLayout(LayoutElement),
     Error(anyhow::Error),
 }
 
@@ -154,6 +157,17 @@ impl ScriptEngine {
                     .map_err(script_error_mapper)
             });
 
+            let ev_tx_cl = ev_tx.clone();
+            engine.register_fn("set_layout", move |layout: Map| -> ScriptFunctionResult<()> {
+                let layout = map_to_layout(layout)
+                    .context("Parse layout data")
+                    .map_err(script_error_mapper)?;
+
+                ev_tx_cl.blocking_send(ScriptEngineEvent::SetLayout(layout))
+                    .context("Emit set layout event")
+                    .map_err(script_error_mapper)
+            });
+
             if let Err(err) = engine.run(&script) {
                 ev_tx.blocking_send(ScriptEngineEvent::Error(
                     anyhow::format_err!("{err}").context("Run script engine")))?;
@@ -168,4 +182,8 @@ impl ScriptEngine {
 
 fn script_error_mapper(err: Error) -> Box<EvalAltResult> {
     format!("{:?}", err).into()
+}
+
+fn map_to_layout(layout: Map) -> Result<LayoutElement> {
+    LayoutElement::from(layout)
 }

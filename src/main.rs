@@ -28,7 +28,7 @@ struct Args {
 async fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
-    let (tui_tx, mut tui_rx) = create_tui()
+    let (tui_tx, mut tui_rx) = create_tui().await
         .context("Create TUI")?;
 
     let (telnet_tx, mut telnet_rx) = telnet_connection()
@@ -101,6 +101,9 @@ async fn main() -> Result<(), anyhow::Error> {
                         ScriptEngineEvent::SendSecret(data) => {
                             telnet_tx.send(TelnetRequest::Send(data.clone())).await?;
                             tui_tx.send(TuiRequest::PrintUserInput("*****".into(), 1)).await?;
+                        },
+                        ScriptEngineEvent::SetLayout(layout) => {
+                            tui_tx.send(TuiRequest::SetLayout(layout)).await?;
                         },
                         ScriptEngineEvent::Error(err) => {
                             tui_tx.send(TuiRequest::PrintError(format!("{:?}", err.context("Script error")), 1)).await?;
