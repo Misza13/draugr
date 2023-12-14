@@ -161,7 +161,7 @@ impl ScriptEngine {
 
             let ev_tx_cl = ev_tx.clone();
             engine.register_fn("set_layout", move |layout: Map| -> ScriptResult<()> {
-                let mut layout = map_to_layout(layout)
+                let mut layout = LayoutElement::from(layout)
                     .context("Parse layout data")
                     .into_script_result()?;
 
@@ -199,8 +199,4 @@ impl<T, E: Debug> ResultExt<T> for Result<T, E> {
     fn into_script_result(self) -> Result<T, Box<EvalAltResult>> {
         self.map_err(|err| format!("{:?}", err).into())
     }
-}
-
-fn map_to_layout(layout: Map) -> Result<LayoutElement> {
-    LayoutElement::from(layout)
 }
