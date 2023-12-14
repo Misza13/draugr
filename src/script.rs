@@ -1,7 +1,9 @@
+use std::fmt::Debug;
+
 use regex::Regex;
 use tokio::sync::mpsc::{channel, Sender, Receiver};
 use tokio::sync::oneshot;
-use anyhow::{Context, Result, Error};
+use anyhow::{Context, Result};
 use rhai::{Engine, EvalAltResult, Map};
 
 use crate::tui::LayoutElement;
@@ -31,7 +33,7 @@ struct ScriptEngine {
     expects: Vec<(Regex, oneshot::Sender<String>)>,
 }
 
-type ScriptFunctionResult<T> = Result<T, Box<EvalAltResult>>;
+type ScriptResult<T> = Result<T, Box<EvalAltResult>>;
 
 pub fn create_script_engine() -> Result<(Sender<ScriptEngineRequest>, Receiver<ScriptEngineEvent>)> {
     let (req_tx, mut req_rx) = channel(256);
@@ -124,44 +126,44 @@ impl ScriptEngine {
             let mut engine = Engine::new();
 
             let ev_tx_cl = ev_tx.clone();
-            engine.register_fn("connect", move |address: String, port: i64| -> ScriptFunctionResult<()> {
+            engine.register_fn("connect", move |address: String, port: i64| -> ScriptResult<()> {
                 ev_tx_cl.blocking_send(ScriptEngineEvent::Connect(address, port as u16))
                     .context("Emit connection request")
-                    .map_err(script_error_mapper)
+                    .into_script_result()
             });
 
             let i_tx_cl = i_tx.clone();
-            engine.register_fn("expect", move |expect: String| -> ScriptFunctionResult<String> {
+            engine.register_fn("expect", move |expect: String| -> ScriptResult<String> {
                 let (tx, rx) = oneshot::channel();
 
                 i_tx_cl.blocking_send(ScriptEvent::Expect(expect, tx))
                     .context("Emit expect event")
-                    .map_err(script_error_mapper)?;
+                    .into_script_result()?;
 
                 rx.blocking_recv()
                     .context("Wait for expectation to be satisfied")
-                    .map_err(script_error_mapper)
+                    .into_script_result()
             });
 
             let ev_tx_cl = ev_tx.clone();
-            engine.register_fn("send", move |text: String| -> ScriptFunctionResult<()> {
+            engine.register_fn("send", move |text: String| -> ScriptResult<()> {
                 ev_tx_cl.blocking_send(ScriptEngineEvent::Send(text))
                     .context("Emit send event")
-                    .map_err(script_error_mapper)
+                    .into_script_result()
             });
 
             let ev_tx_cl = ev_tx.clone();
-            engine.register_fn("send_secret", move |text: String| -> ScriptFunctionResult<()> {
+            engine.register_fn("send_secret", move |text: String| -> ScriptResult<()> {
                 ev_tx_cl.blocking_send(ScriptEngineEvent::SendSecret(text))
                     .context("Emit send secret event")
-                    .map_err(script_error_mapper)
+                    .into_script_result()
             });
 
             let ev_tx_cl = ev_tx.clone();
-            engine.register_fn("set_layout", move |layout: Map| -> ScriptFunctionResult<()> {
+            engine.register_fn("set_layout", move |layout: Map| -> ScriptResult<()> {
                 let mut layout = map_to_layout(layout)
                     .context("Parse layout data")
-                    .map_err(script_error_mapper)?;
+                    .into_script_result()?;
 
                 if layout.input().is_none() {
                     return Err("Layout must include an input".into());
@@ -173,7 +175,7 @@ impl ScriptEngine {
 
                 ev_tx_cl.blocking_send(ScriptEngineEvent::SetLayout(layout))
                     .context("Emit set layout event")
-                    .map_err(script_error_mapper)
+                    .into_script_result()
             });
 
             if let Err(err) = engine.run(&script) {
@@ -188,8 +190,15 @@ impl ScriptEngine {
     }
 }
 
-fn script_error_mapper(err: Error) -> Box<EvalAltResult> {
-    format!("{:?}", err).into()
+trait ResultExt<T> {
+    /// Transform the result into one compatible with Rhai, i.e. `E = Box<EvalAltResult>`.
+    fn into_script_result(self) -> Result<T, Box<EvalAltResult>>;
+}
+
+impl<T, E: Debug> ResultExt<T> for Result<T, E> {
+    fn into_script_result(self) -> Result<T, Box<EvalAltResult>> {
+        self.map_err(|err| format!("{:?}", err).into())
+    }
 }
 
 fn map_to_layout(layout: Map) -> Result<LayoutElement> {
