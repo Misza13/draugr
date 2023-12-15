@@ -4,13 +4,14 @@ use rhai::{Map, Dynamic};
 use tokio::sync::mpsc::{channel, Sender, Receiver};
 use anyhow::{Context, Result, bail, anyhow};
 use crossterm::{
-    event::{self, KeyCode, KeyEventKind, KeyModifiers},
+    event::{self, KeyCode, KeyEventKind, KeyModifiers, EventStream, Event},
     terminal::{
         disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
         LeaveAlternateScreen,
     },
     ExecutableCommand,
 };
+use tokio_stream::StreamExt;
 use ratatui::prelude::*;
 
 use crate::{
@@ -69,15 +70,32 @@ pub async fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>), an
             active_pane: 1,
         };
 
+        let mut event_stream = EventStream::new();
+
         loop {
             tui.render_ui()
                 .context("Render UI")?;
 
-            if tui.process_input().await
-                .context("Process input")? { /* Shutdown signal */ break; }
+            tokio::select! {
+                event = event_stream.next() =>
+                    match event {
+                        Some(Ok(event)) => {
+                            tui.process_input(event).await
+                                .context("Process input event")?;
+                        },
+                        None => break,
+                        _ => {},
+                    },
 
-            tui.process_request()
-                .context("Process input")?;
+                request = tui.rx.recv() =>
+                    match request {
+                        Some(request) => {
+                            tui.process_request(request)
+                                .context("Process input request")?;
+                        },
+                        None => break,
+                    }
+            }
 
             tokio::task::yield_now().await;
         }
@@ -115,63 +133,61 @@ impl TuiWrapper {
         Ok(())
     }
 
-    async fn process_input(&mut self) -> Result<bool> {
-        if let Ok(true) = event::poll(std::time::Duration::from_millis(20)) {
-            if let event::Event::Key(key) = event::read().context("Read key event")? {
-                if key.kind == KeyEventKind::Press {
-                    match (key.modifiers, key.code) {
-                        /* Alt+q = Exit program */
-                        (KeyModifiers::ALT, KeyCode::Char('q')) => {
-                            self.tx.send(TuiEvent::Quit).await?;
+    async fn process_input(&mut self, event: Event) -> Result<bool> {
+        if let event::Event::Key(key) = event {
+            if key.kind == KeyEventKind::Press {
+                match (key.modifiers, key.code) {
+                    /* Alt+q = Exit program */
+                    (KeyModifiers::ALT, KeyCode::Char('q')) => {
+                        self.tx.send(TuiEvent::Quit).await?;
 
-                            return Ok(true);
-                        },
+                        return Ok(true);
+                    },
 
-                        /* Enter = submit input */
-                        (KeyModifiers::NONE, KeyCode::Enter) => {
-                            let data = self.input().get_and_submit();
-                            self.tx.send(TuiEvent::Send(data)).await
-                                .context("Submit user input")?;
-                        },
-                        /* Alt+Enter = submit secret (e.g. password) */
-                        (KeyModifiers::ALT, KeyCode::Enter) => {
-                            let data = self.input().get_and_clear();
-                            self.tx.send(TuiEvent::SendSecret(data)).await
-                                .context("Submit secret user input")?;
-                        },
+                    /* Enter = submit input */
+                    (KeyModifiers::NONE, KeyCode::Enter) => {
+                        let data = self.input().get_and_submit();
+                        self.tx.send(TuiEvent::Send(data)).await
+                            .context("Submit user input")?;
+                    },
+                    /* Alt+Enter = submit secret (e.g. password) */
+                    (KeyModifiers::ALT, KeyCode::Enter) => {
+                        let data = self.input().get_and_clear();
+                        self.tx.send(TuiEvent::SendSecret(data)).await
+                            .context("Submit secret user input")?;
+                    },
 
-                        /* Lowercase characters */
-                        (KeyModifiers::NONE, KeyCode::Char(ch)) => {
-                            self.input().type_string(ch.to_string());
-                        },
-                        /* Uppercase characters */
-                        (KeyModifiers::SHIFT, KeyCode::Char(ch)) => {
-                            self.input().type_string(ch.to_ascii_uppercase().to_string());
-                        },
+                    /* Lowercase characters */
+                    (KeyModifiers::NONE, KeyCode::Char(ch)) => {
+                        self.input().type_string(ch.to_string());
+                    },
+                    /* Uppercase characters */
+                    (KeyModifiers::SHIFT, KeyCode::Char(ch)) => {
+                        self.input().type_string(ch.to_ascii_uppercase().to_string());
+                    },
 
-                        /* Backspace */
-                        (KeyModifiers::NONE, KeyCode::Backspace) => { self.input().backspace(); },
-                        /* Delete */
-                        (KeyModifiers::NONE, KeyCode::Delete) => { self.input().delete(); },
+                    /* Backspace */
+                    (KeyModifiers::NONE, KeyCode::Backspace) => { self.input().backspace(); },
+                    /* Delete */
+                    (KeyModifiers::NONE, KeyCode::Delete) => { self.input().delete(); },
 
-                        /* Navigation */
-                        (KeyModifiers::NONE, KeyCode::Right) => { self.input().right(); },
-                        (KeyModifiers::NONE, KeyCode::Left) => { self.input().left(); },
-                        (KeyModifiers::NONE, KeyCode::Home) => { self.input().home(); },
-                        (KeyModifiers::NONE, KeyCode::End) => { self.input().end(); },
-                        (KeyModifiers::NONE, KeyCode::Up) => { self.input().up() }
-                        (KeyModifiers::NONE, KeyCode::Down) => { self.input().down() }
-                        (KeyModifiers::NONE, KeyCode::PageUp) => { self.active_pane().page_up(); }
-                        (KeyModifiers::NONE, KeyCode::PageDown) => { self.active_pane().page_down(); }
+                    /* Navigation */
+                    (KeyModifiers::NONE, KeyCode::Right) => { self.input().right(); },
+                    (KeyModifiers::NONE, KeyCode::Left) => { self.input().left(); },
+                    (KeyModifiers::NONE, KeyCode::Home) => { self.input().home(); },
+                    (KeyModifiers::NONE, KeyCode::End) => { self.input().end(); },
+                    (KeyModifiers::NONE, KeyCode::Up) => { self.input().up() }
+                    (KeyModifiers::NONE, KeyCode::Down) => { self.input().down() }
+                    (KeyModifiers::NONE, KeyCode::PageUp) => { self.active_pane().page_up(); }
+                    (KeyModifiers::NONE, KeyCode::PageDown) => { self.active_pane().page_down(); }
 
-                        /* Escape = cancel completion suggestions */
-                        (KeyModifiers::NONE, KeyCode::Esc) => { self.input().cancel(); }
+                    /* Escape = cancel completion suggestions */
+                    (KeyModifiers::NONE, KeyCode::Esc) => { self.input().cancel(); }
 
-                        /* Unhandled */
-                        _ => {
-                            self.default_pane().push(format!("Unhandled key: {:?}", key).light_yellow().into());
-                        },
-                    }
+                    /* Unhandled */
+                    _ => {
+                        self.default_pane().push(format!("Unhandled key: {:?}", key).light_yellow().into());
+                    },
                 }
             }
         }
@@ -179,37 +195,35 @@ impl TuiWrapper {
         Ok(false)
     }
 
-    fn process_request(&mut self) -> Result<()> {
-        if let Ok(recv) = self.rx.try_recv() {
-            match recv {
-                TuiRequest::Print(data, _) => {
-                    let line = data.into_text()
-                        .context("Parse ANSI color codes")?
-                        .lines;
-                    self.default_pane().append(line);
-                },
-                TuiRequest::PrintUserInput(data, _) => {
-                    self.default_pane().push(data.light_cyan().bold().into());
-                },
-                TuiRequest::PrintInfo(data, _) => {
-                    for line in data.split('\n') {
-                        self.default_pane().push(format!("[INFO] {line}").light_green().into());
-                    }
-                },
-                TuiRequest::PrintWarning(data, _) => {
-                    for line in data.split('\n') {
-                        self.default_pane().push(format!("[WARN] {line}").light_yellow().into());
-                    }
-                },
-                TuiRequest::PrintError(data, _) => {
-                    for line in data.split('\n') {
-                        self.default_pane().push(format!("[ERR] {line}").light_red().into());
-                    }
-                },
-                TuiRequest::SetLayout(layout) => {
-                    self.layout = layout; /* TODO: copy over the buffers */
-                },
-            }
+    fn process_request(&mut self, recv: TuiRequest) -> Result<()> {
+        match recv {
+            TuiRequest::Print(data, _) => {
+                let line = data.into_text()
+                    .context("Parse ANSI color codes")?
+                    .lines;
+                self.default_pane().append(line);
+            },
+            TuiRequest::PrintUserInput(data, _) => {
+                self.default_pane().push(data.light_cyan().bold().into());
+            },
+            TuiRequest::PrintInfo(data, _) => {
+                for line in data.split('\n') {
+                    self.default_pane().push(format!("[INFO] {line}").light_green().into());
+                }
+            },
+            TuiRequest::PrintWarning(data, _) => {
+                for line in data.split('\n') {
+                    self.default_pane().push(format!("[WARN] {line}").light_yellow().into());
+                }
+            },
+            TuiRequest::PrintError(data, _) => {
+                for line in data.split('\n') {
+                    self.default_pane().push(format!("[ERR] {line}").light_red().into());
+                }
+            },
+            TuiRequest::SetLayout(layout) => {
+                self.layout = layout; /* TODO: copy over the buffers */
+            },
         }
 
         Ok(())
