@@ -38,10 +38,11 @@ pub async fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>), an
     let (req_tx, req_rx) = channel(256);
     let (ev_tx, ev_rx) = channel(256);
 
-    stdout().execute(EnterAlternateScreen)?;
-    enable_raw_mode()?;
+    let mut terminal = init_terminal()
+        .context("Initialize terminal")?;
 
-    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+    install_panic_hook();
+
     terminal.clear()?;
 
     tokio::spawn(async move {
@@ -100,8 +101,8 @@ pub async fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>), an
             tokio::task::yield_now().await;
         }
 
-        stdout().execute(LeaveAlternateScreen)?;
-        disable_raw_mode()?;
+        restore_terminal()
+            .context("Restore terminal")?;
 
         Ok::<(), anyhow::Error>(())
     });
@@ -112,6 +113,27 @@ pub async fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>), an
     Ok((req_tx, ev_rx))
 }
 
+pub fn init_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
+    enable_raw_mode()?;
+    stdout().execute(EnterAlternateScreen)?;
+    let terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+    Ok(terminal)
+}
+
+pub fn restore_terminal() -> Result<()> {
+    stdout().execute(LeaveAlternateScreen)?;
+    disable_raw_mode()?;
+    Ok(())
+}
+
+pub fn install_panic_hook() {
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        stdout().execute(LeaveAlternateScreen).unwrap();
+        disable_raw_mode().unwrap();
+        original_hook(panic_info);
+    }));
+}
 
 struct TuiWrapper {
     terminal: Terminal<CrosstermBackend<Stdout>>,
