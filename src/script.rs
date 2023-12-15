@@ -6,6 +6,9 @@ use tokio::sync::oneshot;
 use anyhow::{Context, Result};
 use rhai::{Engine, EvalAltResult, Map};
 
+/* TODO
+ * It's not clean that this type needs to be leaked from the tui module, but raw Map is not Send.
+ */
 use crate::tui::LayoutElement;
 
 pub enum ScriptEngineRequest {

@@ -6,8 +6,6 @@ use crate::script::*;
 use crate::telnet::*;
 use crate::tui::*;
 
-mod input;
-mod panes;
 mod ring;
 mod script;
 mod telnet;
