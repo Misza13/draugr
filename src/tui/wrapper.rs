@@ -6,17 +6,17 @@ use ratatui::prelude::*;
 
 use crate::tui::*;
 
-pub struct TuiWrapper {
-    terminal: Terminal<CrosstermBackend<Stdout>>,
+pub struct TuiWrapper<B: Backend> {
+    terminal: Terminal<B>,
     tx: Sender<TuiEvent>,
 
     layout: LayoutElement,
     active_pane: usize,
 }
 
-impl TuiWrapper {
-    pub fn new(terminal: Terminal<CrosstermBackend<Stdout>>, tx: Sender<TuiEvent>) -> TuiWrapper {
-        TuiWrapper { terminal, tx, layout: TuiWrapper::default_layout(), active_pane: 1 }
+impl<B: Backend> TuiWrapper<B> {
+    pub fn new(terminal: Terminal<B>, tx: Sender<TuiEvent>) -> TuiWrapper<B> {
+        TuiWrapper { terminal, tx, layout: TuiWrapper::<B>::default_layout(), active_pane: 1 }
     }
 
     fn default_layout() -> LayoutElement {

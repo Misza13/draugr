@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, Context, anyhow};
 use telnet::{Event, TelnetOption};
 use tokio::sync::mpsc::{channel, Sender, Receiver};
 
@@ -41,7 +41,7 @@ pub fn telnet_connection() -> Result<(Sender<TelnetRequest>, Receiver<TelnetEven
                 }
         }
 
-        Ok::<(), anyhow::Error>(())
+        anyhow::Ok(())
     });
 
     Ok((req_tx, ev_rx))

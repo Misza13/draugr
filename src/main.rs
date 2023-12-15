@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Result, Context};
 use clap::{Parser, arg};
 use tokio::sync::mpsc::Sender;
 
@@ -66,7 +66,7 @@ async fn main() -> Result<()> {
             }
         }
 
-        Ok::<(), anyhow::Error>(())
+        anyhow::Ok(())
     }).await??;
 
     Ok(())

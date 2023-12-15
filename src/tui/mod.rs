@@ -39,7 +39,7 @@ pub enum TuiEvent {
     Quit,
 }
 
-pub async fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>), anyhow::Error> {
+pub async fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>)> {
     let (req_tx, mut req_rx) = channel(256);
     let (ev_tx, ev_rx) = channel(256);
 
@@ -86,7 +86,7 @@ pub async fn create_tui() -> Result<(Sender<TuiRequest>, Receiver<TuiEvent>), an
         restore_terminal()
             .context("Restore terminal")?;
 
-        Ok::<(), anyhow::Error>(())
+        anyhow::Ok(())
     });
 
     req_tx.send(TuiRequest::Print("Welcome to Draugr! (press 'Alt+q' to quit)\n".into(), 1)).await

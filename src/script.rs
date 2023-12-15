@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use regex::Regex;
 use tokio::sync::mpsc::{channel, Sender, Receiver};
 use tokio::sync::oneshot;
-use anyhow::{Context, Result};
+use anyhow::{Result, Context};
 use rhai::{Engine, EvalAltResult, Map};
 
 /* TODO
@@ -72,7 +72,7 @@ pub fn create_script_engine() -> Result<(Sender<ScriptEngineRequest>, Receiver<S
             }
         }
 
-        Ok::<(), anyhow::Error>(())
+        anyhow::Ok(())
     });
 
     Ok((req_tx, ev_rx))
